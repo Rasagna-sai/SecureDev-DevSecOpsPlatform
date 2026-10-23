@@ -1,0 +1,7 @@
+[
+  {
+    "RuleID": "generic-api-key",
+    "File": "src/demo.txt",
+    "Secret": "REDACTED_FAKE_TEST_VALUE"
+  }
+]

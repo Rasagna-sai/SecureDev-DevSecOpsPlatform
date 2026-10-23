@@ -17,3 +17,16 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Generated security scan reports and test output
+trivy-report.json
+gitleaks-report.json
+test-output.txt
+
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+
+# Accidental nested duplicate project files
+backend/securedev-backend/backend/

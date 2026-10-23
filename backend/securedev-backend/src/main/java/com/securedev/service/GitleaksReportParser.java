@@ -54,6 +54,40 @@ public class GitleaksReportParser {
 
         return findings;
     }
+    
+public List<SecurityFinding> parseReportFromJson(String reportJson)
+        throws IOException {
+
+    List<Map<String, Object>> report = objectMapper.readValue(
+            reportJson,
+            new TypeReference<List<Map<String, Object>>>() {}
+    );
+
+    List<SecurityFinding> findings = new ArrayList<>();
+
+    for (Map<String, Object> item : report) {
+        SecurityFinding finding = new SecurityFinding();
+
+        String ruleId = String.valueOf(
+                item.getOrDefault("RuleID", "unknown-rule"));
+
+        String file = String.valueOf(
+                item.getOrDefault("File", "unknown file"));
+
+        finding.setTitle("Potential secret detected: " + ruleId);
+        finding.setDescription(
+                "Gitleaks detected a potential secret in file: " + file
+                        + ". Review the finding and rotate the credential "
+                        + "if it is confirmed exposed.");
+        finding.setSeverity(mapSeverity(ruleId));
+        finding.setSourceTool("Gitleaks");
+
+        findings.add(finding);
+    }
+
+    return findings;
+}
+
 
     private String mapSeverity(String ruleId) {
         String rule = ruleId.toLowerCase();

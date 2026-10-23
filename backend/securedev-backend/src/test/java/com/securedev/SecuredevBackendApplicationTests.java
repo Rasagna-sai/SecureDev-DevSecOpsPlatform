@@ -17,10 +17,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.securedev.controller.SecurityFindingController;
 import com.securedev.entity.SecurityFinding;
 import com.securedev.exception.GlobalExceptionHandler;
 import com.securedev.repository.SecurityFindingRepository;
+import com.securedev.service.GitleaksReportParser;
+import com.securedev.service.RiskPrioritizationService;
+import com.securedev.service.TrivyReportParser;
 
 @WebMvcTest(SecurityFindingController.class)
 @Import(GlobalExceptionHandler.class)
@@ -31,6 +35,18 @@ class SecuredevBackendApplicationTests {
 
     @MockitoBean
     private SecurityFindingRepository repository;
+
+	@MockitoBean
+	private GitleaksReportParser gitleaksReportParser;
+
+    @MockitoBean
+private TrivyReportParser trivyReportParser;
+
+	@MockitoBean
+	private ObjectMapper objectMapper;
+
+    @MockitoBean
+private RiskPrioritizationService riskPrioritizationService;
 
     @Test
     void createFindingReturnsCreatedFinding() throws Exception {
