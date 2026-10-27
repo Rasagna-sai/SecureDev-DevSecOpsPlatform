@@ -93,6 +93,23 @@ function App() {
   const openCount = findings.filter(
     (finding) => finding.status === "OPEN"
   ).length;
+  const [searchTerm, setSearchTerm] = useState("");
+    const [severityFilter, setSeverityFilter] = useState("ALL");
+    const [statusFilter, setStatusFilter] = useState("ALL");
+
+    const filteredFindings = findings.filter((finding) => {
+      const matchesSearch = `${finding.title} ${finding.description} ${finding.sourceTool}`
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+
+      const matchesSeverity =
+        severityFilter === "ALL" || finding.severity === severityFilter;
+
+      const matchesStatus =
+        statusFilter === "ALL" || finding.status === statusFilter;
+
+      return matchesSearch && matchesSeverity && matchesStatus;
+    });
 
   const updateFindingStatus = async (finding) => {
   const newStatus =
@@ -247,67 +264,105 @@ function App() {
             {loading && <p className="message">Loading findings…</p>}
             {error && <p className="error">{error}</p>}
 
-            {!loading && !error && (
-              <div className="table-wrapper">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>FINDING</th>
-                      <th>SEVERITY</th>
-                      <th>SOURCE</th>
-                      <th>STATUS</th>
-                      <th>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {findings.map((finding) => (
-                      <tr key={finding.id}>
-                        <td>
-                          <strong>{finding.title}</strong>
-                          <span className="description">
-                            {finding.description}
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            className={`severity ${String(
-                              finding.severity
-                            ).toLowerCase()}`}
-                          >
-                            {finding.severity}
-                          </span>
-                        </td>
-                        <td>{finding.sourceTool}</td>
-                        <td>
-                          <span className="status-pill">
-                            {finding.status}
-                          </span>
-                        </td>
-                        <td>
-                          <button
-                            className="status-action-button"
-                            onClick={() => updateFindingStatus(finding)}
-                          >
-                            {finding.status === "OPEN" ? "Resolve" : "Reopen"}
-                          </button>
+            
+{!loading && !error && (
+  <>
+    <div className="finding-filters">
+      <input
+        type="text"
+        placeholder="Search by title, description, or source..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+      />
 
-                          <button
-                            className="remediation-button"
-                            onClick={() => setSelectedFinding(finding)}
-                          >
-                            View remediation
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      <select
+        value={severityFilter}
+        onChange={(e) => setSeverityFilter(e.target.value)}
+      >
+        <option value="ALL">All Severities</option>
+        <option value="CRITICAL">Critical</option>
+        <option value="HIGH">High</option>
+        <option value="MEDIUM">Medium</option>
+        <option value="LOW">Low</option>
+      </select>
 
-                {findings.length === 0 && (
-                  <p className="message">No findings available yet.</p>
-                )}
-              </div>
-            )}
+      <select
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value)}
+      >
+        <option value="ALL">All Statuses</option>
+        <option value="OPEN">Open</option>
+        <option value="RESOLVED">Resolved</option>
+      </select>
+    </div>
+
+    <div className="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>FINDING</th>
+            <th>SEVERITY</th>
+            <th>SOURCE</th>
+            <th>STATUS</th>
+            <th>ACTION</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {filteredFindings.map((finding) => (
+            <tr key={finding.id}>
+              <td>
+                <strong>{finding.title}</strong>
+                <span className="description">
+                  {finding.description}
+                </span>
+              </td>
+
+              <td>
+                <span
+                  className={`severity ${String(
+                    finding.severity
+                  ).toLowerCase()}`}
+                >
+                  {finding.severity}
+                </span>
+              </td>
+
+              <td>{finding.sourceTool}</td>
+
+              <td>
+                <span className="status-pill">
+                  {finding.status}
+                </span>
+              </td>
+
+              <td>
+                <button
+                  className="status-action-button"
+                  onClick={() => updateFindingStatus(finding)}
+                >
+                  {finding.status === "OPEN" ? "Resolve" : "Reopen"}
+                </button>
+
+                <button
+                  className="remediation-button"
+                  onClick={() => setSelectedFinding(finding)}
+                >
+                  View remediation
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {filteredFindings.length === 0 && (
+        <p className="message">No matching findings.</p>
+      )}
+    </div>
+  </>
+)}
+
           </section>
         )}
 
@@ -316,6 +371,7 @@ function App() {
         </footer>
       </main>
     </div>
+
   );
 }
 

@@ -285,3 +285,34 @@ footer { margin-top: 25px; color: #687387; font-size: 10px; }
 .status-action-button:hover {
   background: #243b35;
 }
+.finding-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.finding-filters input,
+.finding-filters select {
+  min-width: 160px;
+  padding: 11px 12px;
+  border: 1px solid #2b3442;
+  border-radius: 8px;
+  background: #111620;
+  color: #e5e7eb;
+  font-size: 13px;
+}
+
+.finding-filters input {
+  flex: 1;
+}
+
+.finding-filters input:focus,
+.finding-filters select:focus {
+  outline: 1px solid #8cf4bc;
+  border-color: #8cf4bc;
+}
+
+.finding-filters input::placeholder {
+  color: #8994a8;
+}
