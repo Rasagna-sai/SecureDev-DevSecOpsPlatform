@@ -5,6 +5,9 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -112,4 +115,76 @@ private RiskPrioritizationService riskPrioritizationService;
                 .andExpect(jsonPath("$.severity").exists())
                 .andExpect(jsonPath("$.sourceTool").exists());
     }
+    
+@Test
+void importTrivyReportSavesNewFindings() throws Exception {
+    SecurityFinding finding = new SecurityFinding();
+    finding.setTitle("Trivy: CVE-TEST-123 in test-package");
+    finding.setDescription("Test vulnerability");
+    finding.setSeverity("HIGH");
+    finding.setSourceTool("Trivy");
+
+    when(trivyReportParser.parseReportFromJson(any(String.class)))
+            .thenReturn(List.of(finding));
+    when(repository.existsBySourceToolAndTitleAndDescription(
+            "Trivy", finding.getTitle(), finding.getDescription()))
+            .thenReturn(false);
+    when(repository.saveAll(anyList()))
+            .thenReturn(List.of(finding));
+
+    mockMvc.perform(post("/api/findings/import/trivy")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "ArtifactName": "test-image",
+                  "Results": []
+                }
+                """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].title")
+                    .value("Trivy: CVE-TEST-123 in test-package"));
+
+    verify(repository).saveAll(anyList());
+}
+
+@Test
+void importTrivyReportSkipsDuplicateFindings() throws Exception {
+    SecurityFinding finding = new SecurityFinding();
+    finding.setTitle("Trivy: CVE-TEST-123 in test-package");
+    finding.setDescription("Test vulnerability");
+    finding.setSeverity("HIGH");
+    finding.setSourceTool("Trivy");
+
+    when(trivyReportParser.parseReportFromJson(any(String.class)))
+            .thenReturn(List.of(finding));
+    when(repository.existsBySourceToolAndTitleAndDescription(
+            "Trivy", finding.getTitle(), finding.getDescription()))
+            .thenReturn(true);
+
+    mockMvc.perform(post("/api/findings/import/trivy")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {
+                  "ArtifactName": "test-image",
+                  "Results": []
+                }
+                """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isEmpty());
+
+    verify(repository).saveAll(
+        argThat((List<SecurityFinding> list) -> list.isEmpty()));
+}
+
+@Test
+void importTrivyReportRejectsMalformedJson() throws Exception {
+    when(trivyReportParser.parseReportFromJson(any(String.class)))
+            .thenThrow(new java.io.IOException("Invalid Trivy report JSON"));
+
+    mockMvc.perform(post("/api/findings/import/trivy")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{ invalid json"))
+            .andExpect(status().isBadRequest());
+}
+
 }
