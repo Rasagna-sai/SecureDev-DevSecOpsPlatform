@@ -190,3 +190,85 @@ footer { margin-top: 25px; color: #687387; font-size: 10px; }
   .panel-heading { padding: 18px; }
   th, td { padding: 14px; }
 }
+
+.nav-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-item:hover,
+.remediation-button:hover {
+  background: #1b2c29;
+  color: #8cf4bc;
+}
+
+.remediation-button {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #34483f;
+  border-radius: 7px;
+  background: #19211f;
+  color: #a1f6c7;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.remediation-content {
+  padding: 24px;
+}
+
+.remediation-content h3 {
+  margin: 24px 0 14px;
+  font-size: 15px;
+}
+
+.remediation-reason {
+  color: #c7cede;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.remediation-steps {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.remediation-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #c7cede;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.step-number {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #34483f;
+  border-radius: 8px;
+  background: #19211f;
+  color: #8cf4bc;
+  font-weight: 700;
+}
+
+.remediation-note {
+  margin: 24px 0;
+  padding: 14px;
+  border: 1px solid #3b3540;
+  border-radius: 8px;
+  background: #191820;
+  color: #b9b7c7;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
