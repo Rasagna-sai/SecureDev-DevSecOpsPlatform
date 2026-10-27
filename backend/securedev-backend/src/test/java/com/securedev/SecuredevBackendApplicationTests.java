@@ -187,4 +187,65 @@ void importTrivyReportRejectsMalformedJson() throws Exception {
             .andExpect(status().isBadRequest());
 }
 
+@Test
+void importGitleaksReportSavesNewFindings() throws Exception {
+    SecurityFinding finding = new SecurityFinding();
+    finding.setTitle("Hardcoded API key");
+    finding.setDescription("Secret found in test file");
+    finding.setSeverity("HIGH");
+    finding.setSourceTool("Gitleaks");
+
+    when(gitleaksReportParser.parseReportFromJson(any(String.class)))
+            .thenReturn(List.of(finding));
+    when(repository.existsBySourceToolAndTitleAndDescription(
+            "Gitleaks", finding.getTitle(), finding.getDescription()))
+            .thenReturn(false);
+    when(repository.saveAll(anyList()))
+            .thenReturn(List.of(finding));
+
+    mockMvc.perform(post("/api/findings/import/gitleaks")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("[]"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].title").value("Hardcoded API key"));
+
+    verify(repository).saveAll(anyList());
+}
+
+@Test
+void importGitleaksReportSkipsDuplicateFindings() throws Exception {
+    SecurityFinding finding = new SecurityFinding();
+    finding.setTitle("Hardcoded API key");
+    finding.setDescription("Secret found in test file");
+    finding.setSeverity("HIGH");
+    finding.setSourceTool("Gitleaks");
+
+    when(gitleaksReportParser.parseReportFromJson(any(String.class)))
+            .thenReturn(List.of(finding));
+    when(repository.existsBySourceToolAndTitleAndDescription(
+            "Gitleaks", finding.getTitle(), finding.getDescription()))
+            .thenReturn(true);
+
+    mockMvc.perform(post("/api/findings/import/gitleaks")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("[]"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isEmpty());
+
+    verify(repository).saveAll(
+            argThat((List<SecurityFinding> list) -> list.isEmpty()));
+}
+
+@Test
+void importGitleaksReportRejectsMalformedJson() throws Exception {
+    when(gitleaksReportParser.parseReportFromJson(any(String.class)))
+            .thenThrow(new java.io.IOException("Invalid Gitleaks report JSON"));
+
+    mockMvc.perform(post("/api/findings/import/gitleaks")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{ invalid json"))
+            .andExpect(status().isBadRequest());
+}
+
+
 }
