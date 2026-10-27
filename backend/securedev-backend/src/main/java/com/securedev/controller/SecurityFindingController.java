@@ -3,9 +3,12 @@ package com.securedev.controller;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,6 +27,7 @@ import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/findings")
+@CrossOrigin(origins = "http://localhost:5173")
 public class SecurityFindingController {
 
     private final SecurityFindingRepository repository;
@@ -129,6 +133,30 @@ public List<SecurityFinding> importGitleaksReport(
                 "Invalid Gitleaks report JSON",
                 ex);
     }
+}
+    @PatchMapping("/{id}/status")
+public SecurityFinding updateFindingStatus(
+        @PathVariable Long id,
+        @RequestBody Map<String, String> request) {
+
+    String status = request.get("status");
+
+    if (status == null ||
+            (!status.equals("OPEN") && !status.equals("RESOLVED"))) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Status must be OPEN or RESOLVED");
+    }
+
+
+    SecurityFinding finding = repository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Finding not found: " + id));
+
+    finding.setStatus(status);
+
+    return repository.save(finding);
 }
 
 }

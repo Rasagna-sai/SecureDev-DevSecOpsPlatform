@@ -271,4 +271,17 @@ footer { margin-top: 25px; color: #687387; font-size: 10px; }
   font-size: 12px;
   line-height: 1.7;
 }
+.status-action-button {
+  margin: 8px 8px 8px 0;
+  padding: 9px 12px;
+  border: 1px solid #34483f;
+  border-radius: 7px;
+  background: #1b2c29;
+  color: #8cf4bc;
+  font-size: 11px;
+  cursor: pointer;
+}
 
+.status-action-button:hover {
+  background: #243b35;
+}

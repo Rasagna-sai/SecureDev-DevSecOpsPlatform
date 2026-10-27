@@ -94,6 +94,44 @@ function App() {
     (finding) => finding.status === "OPEN"
   ).length;
 
+  const updateFindingStatus = async (finding) => {
+  const newStatus =
+    finding.status === "OPEN" ? "RESOLVED" : "OPEN";
+
+  try {
+    const response = await fetch(
+      `${API_URL}/${finding.id}/status`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: newStatus }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Unable to update finding status");
+    }
+
+    const updatedFinding = await response.json();
+
+    setFindings((current) =>
+      current.map((item) =>
+        item.id === updatedFinding.id ? updatedFinding : item
+      )
+    );
+
+    setSelectedFinding((current) =>
+      current?.id === updatedFinding.id ? updatedFinding : current
+    );
+
+    setError("");
+  } catch {
+    setError("Could not update finding status. Please try again.");
+  }
+};
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -182,9 +220,10 @@ function App() {
 
         {selectedFinding ? (
           <RemediationPanel
-            finding={selectedFinding}
-            onBack={() => setSelectedFinding(null)}
-          />
+              finding={selectedFinding}
+              onBack={() => setSelectedFinding(null)}
+              onToggleStatus={updateFindingStatus}
+            />
         ) : (
           <section className="panel">
             <div className="panel-heading">
@@ -246,6 +285,13 @@ function App() {
                         </td>
                         <td>
                           <button
+                            className="status-action-button"
+                            onClick={() => updateFindingStatus(finding)}
+                          >
+                            {finding.status === "OPEN" ? "Resolve" : "Reopen"}
+                          </button>
+
+                          <button
                             className="remediation-button"
                             onClick={() => setSelectedFinding(finding)}
                           >
@@ -273,7 +319,7 @@ function App() {
   );
 }
 
-function RemediationPanel({ finding, onBack }) {
+function RemediationPanel({ finding, onBack, onToggleStatus }) {
   const guidance = getRemediation(finding);
 
   return (
@@ -310,10 +356,18 @@ function RemediationPanel({ finding, onBack }) {
           available details. Validate the issue before applying a fix.
           SecureDev has not automatically remediated this finding.
         </div>
+          <button
+            className="status-action-button"
+            onClick={() => onToggleStatus(finding)}
+          >
+            {finding.status === "OPEN"
+              ? "Mark as resolved"
+              : "Reopen finding"}
+          </button>
 
-        <button className="refresh-button" onClick={onBack}>
-          ← &nbsp; Back to findings
-        </button>
+          <button className="refresh-button" onClick={onBack}>
+            ← &nbsp; Back to findings
+          </button>
       </div>
     </section>
   );
