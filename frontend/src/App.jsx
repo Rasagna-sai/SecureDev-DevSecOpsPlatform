@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from "react";
 import "./App.css";
+import SecurityAnalytics from "./components/SecurityAnalytics";
 
 const API_URL = "http://localhost:8080/api/findings";
 
@@ -73,6 +74,13 @@ function App() {
   const [error, setError] = useState("");
   const [page, setPage] = useState("overview");
   const [selectedFinding, setSelectedFinding] = useState(null);
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }, [page, selectedFinding]);
 
   useEffect(() => {
     fetch(`${API_URL}/prioritized`)
@@ -233,6 +241,9 @@ function App() {
               tone="open"
             />
           </section>
+        )}
+        {!selectedFinding && page === "overview" && (
+          <SecurityAnalytics findings={findings} />
         )}
 
         {selectedFinding ? (
