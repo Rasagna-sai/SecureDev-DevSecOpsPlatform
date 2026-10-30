@@ -21,6 +21,7 @@ import com.securedev.entity.SecurityFinding;
 import com.securedev.repository.SecurityFindingRepository;
 import com.securedev.service.GitleaksReportParser;
 import com.securedev.service.RiskPrioritizationService;
+import com.securedev.service.ScannerExecutionService;
 import com.securedev.service.TrivyReportParser;
 
 import jakarta.validation.Valid;
@@ -35,20 +36,23 @@ public class SecurityFindingController {
     private final ObjectMapper objectMapper;
     private final RiskPrioritizationService riskPrioritizationService;
     private final TrivyReportParser trivyReportParser;
+    private final ScannerExecutionService scannerExecutionService;
 
     public SecurityFindingController(
-        SecurityFindingRepository repository,
-        GitleaksReportParser gitleaksReportParser,
-        TrivyReportParser trivyReportParser,
-        RiskPrioritizationService riskPrioritizationService,
-        ObjectMapper objectMapper) {
+            SecurityFindingRepository repository,
+            GitleaksReportParser gitleaksReportParser,
+            TrivyReportParser trivyReportParser,
+            RiskPrioritizationService riskPrioritizationService,
+            ScannerExecutionService scannerExecutionService,
+            ObjectMapper objectMapper) {
 
-    this.repository = repository;
-    this.gitleaksReportParser = gitleaksReportParser;
-    this.trivyReportParser = trivyReportParser;
-    this.riskPrioritizationService = riskPrioritizationService;
-    this.objectMapper = objectMapper;
-}
+        this.repository = repository;
+        this.gitleaksReportParser = gitleaksReportParser;
+        this.trivyReportParser = trivyReportParser;
+        this.riskPrioritizationService = riskPrioritizationService;
+        this.scannerExecutionService = scannerExecutionService;
+        this.objectMapper = objectMapper;
+    }
 
     @PostMapping
     public SecurityFinding createFinding(
@@ -68,95 +72,128 @@ public class SecurityFindingController {
                         HttpStatus.NOT_FOUND,
                         "Finding not found: " + id));
     }
+
     @GetMapping("/prioritized")
     public List<SecurityFinding> getPrioritizedFindings() {
         return riskPrioritizationService.getPrioritizedFindings();
-}
+    }
+
+    @PostMapping("/scan")
+    public ScannerExecutionService.ScanResult scanRepository() {
+
+        try {
+            return scannerExecutionService.scanRepository();
+
+        } catch (InterruptedException ex) {
+
+            Thread.currentThread().interrupt();
+
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Scanner execution was interrupted.",
+                    ex);
+
+        } catch (IOException ex) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Scanner execution failed. Check scanner logs.",
+                    ex);
+        }
+    }
 
     @PostMapping("/import/trivy")
-public List<SecurityFinding> importTrivyReport(
-        @RequestBody String reportJson) {
-    try {
-        List<SecurityFinding> findings =
-                trivyReportParser.parseReportFromJson(reportJson);
+    public List<SecurityFinding> importTrivyReport(
+            @RequestBody String reportJson) {
 
-        List<SecurityFinding> newFindings = new java.util.ArrayList<>();
+        try {
+            List<SecurityFinding> findings =
+                    trivyReportParser.parseReportFromJson(reportJson);
 
-        for (SecurityFinding finding : findings) {
-            boolean exists = repository.existsBySourceToolAndTitleAndDescription(
-                    finding.getSourceTool(),
-                    finding.getTitle(),
-                    finding.getDescription()
-            );
+            List<SecurityFinding> newFindings =
+                    new java.util.ArrayList<>();
 
-            if (!exists) {
-                newFindings.add(finding);
+            for (SecurityFinding finding : findings) {
+
+                boolean exists =
+                        repository.existsBySourceToolAndTitleAndDescription(
+                                finding.getSourceTool(),
+                                finding.getTitle(),
+                                finding.getDescription());
+
+                if (!exists) {
+                    newFindings.add(finding);
+                }
             }
+
+            return repository.saveAll(newFindings);
+
+        } catch (IOException ex) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid Trivy report JSON",
+                    ex);
         }
-
-        return repository.saveAll(newFindings);
-    } catch (IOException ex) {
-        throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Invalid Trivy report JSON",
-                ex
-        );
     }
-}
-    
-@PostMapping("/import/gitleaks")
-public List<SecurityFinding> importGitleaksReport(
-        @RequestBody String reportJson) {
-    try {
-        List<SecurityFinding> findings = gitleaksReportParser
-                .parseReportFromJson(reportJson);
 
-        List<SecurityFinding> newFindings = new java.util.ArrayList<>();
+    @PostMapping("/import/gitleaks")
+    public List<SecurityFinding> importGitleaksReport(
+            @RequestBody String reportJson) {
 
-        for (SecurityFinding finding : findings) {
-            boolean exists = repository
-                    .existsBySourceToolAndTitleAndDescription(
-                            finding.getSourceTool(),
-                            finding.getTitle(),
-                            finding.getDescription()
-                    );
+        try {
+            List<SecurityFinding> findings =
+                    gitleaksReportParser.parseReportFromJson(reportJson);
 
-            if (!exists) {
-                newFindings.add(finding);
+            List<SecurityFinding> newFindings =
+                    new java.util.ArrayList<>();
+
+            for (SecurityFinding finding : findings) {
+
+                boolean exists =
+                        repository.existsBySourceToolAndTitleAndDescription(
+                                finding.getSourceTool(),
+                                finding.getTitle(),
+                                finding.getDescription());
+
+                if (!exists) {
+                    newFindings.add(finding);
+                }
             }
-        }
 
-        return repository.saveAll(newFindings);
-    } catch (IOException ex) {
-        throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Invalid Gitleaks report JSON",
-                ex);
+            return repository.saveAll(newFindings);
+
+        } catch (IOException ex) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid Gitleaks report JSON",
+                    ex);
+        }
     }
-}
+
     @PatchMapping("/{id}/status")
-public SecurityFinding updateFindingStatus(
-        @PathVariable Long id,
-        @RequestBody Map<String, String> request) {
+    public SecurityFinding updateFindingStatus(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> request) {
 
-    String status = request.get("status");
+        String status = request.get("status");
 
-    if (status == null ||
-            (!status.equals("OPEN") && !status.equals("RESOLVED"))) {
-        throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Status must be OPEN or RESOLVED");
+        if (status == null ||
+                (!status.equals("OPEN") && !status.equals("RESOLVED"))) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Status must be OPEN or RESOLVED");
+        }
+
+        SecurityFinding finding = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Finding not found: " + id));
+
+        finding.setStatus(status);
+
+        return repository.save(finding);
     }
-
-
-    SecurityFinding finding = repository.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Finding not found: " + id));
-
-    finding.setStatus(status);
-
-    return repository.save(finding);
-}
-
 }

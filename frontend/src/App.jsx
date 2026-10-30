@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import "./App.css";
 import SecurityAnalytics from "./components/SecurityAnalytics";
@@ -72,8 +71,17 @@ function App() {
   const [findings, setFindings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [scanResult, setScanResult] = useState(null);
+
   const [page, setPage] = useState("overview");
   const [selectedFinding, setSelectedFinding] = useState(null);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   useEffect(() => {
     window.scrollTo({
@@ -82,18 +90,73 @@ function App() {
     });
   }, [page, selectedFinding]);
 
+  // Fetch findings from the backend
+  const loadFindings = async () => {
+    try {
+      const response = await fetch(`${API_URL}/prioritized`);
+
+      if (!response.ok) {
+        throw new Error("Unable to load security findings");
+      }
+
+      const data = await response.json();
+
+      setFindings(data);
+      setError("");
+
+      return true;
+    } catch {
+      setError("Could not connect to SecureDev backend.");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetch(`${API_URL}/prioritized`)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Unable to load security findings");
-        }
-        return response.json();
-      })
-      .then((data) => setFindings(data))
-      .catch(() => setError("Could not connect to SecureDev backend."))
-      .finally(() => setLoading(false));
+    loadFindings();
   }, []);
+
+  // Execute Gitleaks and Trivy scans
+  const runSecurityScan = async () => {
+    setScanning(true);
+    setScanError("");
+    setScanResult(null);
+
+    try {
+      const response = await fetch(`${API_URL}/scan`, {
+        method: "POST",
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          result?.detail ||
+            result?.message ||
+            "The security scan failed. Check the backend logs."
+        );
+      }
+
+      setScanResult(result);
+
+      // Refresh dashboard after successful scan
+      const refreshed = await loadFindings();
+
+      if (!refreshed) {
+        setScanError(
+          "The scan completed, but the dashboard could not refresh. Use Refresh to try again."
+        );
+      }
+    } catch (scanError) {
+      setScanError(
+        scanError.message ||
+          "Could not run the security scan. Check the backend connection."
+      );
+    } finally {
+      setScanning(false);
+    }
+  };
 
   const countBySeverity = (severity) =>
     findings.filter((finding) => finding.severity === severity).length;
@@ -101,61 +164,60 @@ function App() {
   const openCount = findings.filter(
     (finding) => finding.status === "OPEN"
   ).length;
-  const [searchTerm, setSearchTerm] = useState("");
-    const [severityFilter, setSeverityFilter] = useState("ALL");
-    const [statusFilter, setStatusFilter] = useState("ALL");
 
-    const filteredFindings = findings.filter((finding) => {
-      const matchesSearch = `${finding.title} ${finding.description} ${finding.sourceTool}`
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
+  // Search and filter findings
+  const filteredFindings = findings.filter((finding) => {
+    const matchesSearch = `${finding.title} ${finding.description} ${finding.sourceTool}`
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
 
-      const matchesSeverity =
-        severityFilter === "ALL" || finding.severity === severityFilter;
+    const matchesSeverity =
+      severityFilter === "ALL" || finding.severity === severityFilter;
 
-      const matchesStatus =
-        statusFilter === "ALL" || finding.status === statusFilter;
+    const matchesStatus =
+      statusFilter === "ALL" || finding.status === statusFilter;
 
-      return matchesSearch && matchesSeverity && matchesStatus;
-    });
+    return matchesSearch && matchesSeverity && matchesStatus;
+  });
 
+  // Resolve or reopen findings
   const updateFindingStatus = async (finding) => {
-  const newStatus =
-    finding.status === "OPEN" ? "RESOLVED" : "OPEN";
+    const newStatus =
+      finding.status === "OPEN" ? "RESOLVED" : "OPEN";
 
-  try {
-    const response = await fetch(
-      `${API_URL}/${finding.id}/status`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status: newStatus }),
+    try {
+      const response = await fetch(
+        `${API_URL}/${finding.id}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ status: newStatus }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Unable to update finding status");
       }
-    );
 
-    if (!response.ok) {
-      throw new Error("Unable to update finding status");
+      const updatedFinding = await response.json();
+
+      setFindings((current) =>
+        current.map((item) =>
+          item.id === updatedFinding.id ? updatedFinding : item
+        )
+      );
+
+      setSelectedFinding((current) =>
+        current?.id === updatedFinding.id ? updatedFinding : current
+      );
+
+      setError("");
+    } catch {
+      setError("Could not update finding status. Please try again.");
     }
-
-    const updatedFinding = await response.json();
-
-    setFindings((current) =>
-      current.map((item) =>
-        item.id === updatedFinding.id ? updatedFinding : item
-      )
-    );
-
-    setSelectedFinding((current) =>
-      current?.id === updatedFinding.id ? updatedFinding : current
-    );
-
-    setError("");
-  } catch {
-    setError("Could not update finding status. Please try again.");
-  }
-};
+  };
 
   return (
     <div className="app">
@@ -198,6 +260,7 @@ function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">DEVSECOPS PLATFORM</p>
+
             <h1>
               {selectedFinding
                 ? "Remediation guidance"
@@ -205,6 +268,7 @@ function App() {
                   ? "Security overview"
                   : "Scan findings"}
             </h1>
+
             <p className="subtitle">
               {selectedFinding
                 ? "Recommended investigation and remediation steps."
@@ -214,27 +278,75 @@ function App() {
             </p>
           </div>
 
-          <button
-            className="refresh-button"
-            onClick={() => window.location.reload()}
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              alignItems: "center",
+            }}
           >
-            ↻ &nbsp; Refresh
-          </button>
+            <button
+              className="refresh-button"
+              onClick={runSecurityScan}
+              disabled={scanning}
+              title="Run Gitleaks and Trivy against the mounted repository"
+            >
+              {scanning ? "Scanning..." : "Run Security Scan"}
+            </button>
+
+            <button
+              className="refresh-button"
+              onClick={loadFindings}
+              disabled={scanning}
+            >
+              ↻ &nbsp; Refresh
+            </button>
+          </div>
         </header>
 
+        {/* Scanner loading message */}
+        {scanning && (
+          <p className="message">
+            Security scan is running. Gitleaks and Trivy are checking the
+            mounted repository. This may take a few minutes.
+          </p>
+        )}
+
+        {/* Scanner error */}
+        {scanError && (
+          <p className="error">{scanError}</p>
+        )}
+
+        {/* Scanner results */}
+        {scanResult && (
+          <p className="message">
+            Scan completed — Gitleaks: {scanResult.gitleaksFindings} findings,
+            Trivy: {scanResult.trivyFindings} findings,
+            newly saved: {scanResult.insertedFindings},
+            duplicates skipped: {scanResult.duplicateFindings}.
+          </p>
+        )}
+
+        {/* Dashboard metrics */}
         {!selectedFinding && page === "overview" && (
           <section className="metrics">
-            <Metric label="Total findings" value={findings.length} />
+            <Metric
+              label="Total findings"
+              value={findings.length}
+            />
+
             <Metric
               label="Critical"
               value={countBySeverity("CRITICAL")}
               tone="critical"
             />
+
             <Metric
               label="High"
               value={countBySeverity("HIGH")}
               tone="high"
             />
+
             <Metric
               label="Open findings"
               value={openCount}
@@ -242,16 +354,19 @@ function App() {
             />
           </section>
         )}
+
+        {/* Analytics */}
         {!selectedFinding && page === "overview" && (
           <SecurityAnalytics findings={findings} />
         )}
 
+        {/* Remediation or findings table */}
         {selectedFinding ? (
           <RemediationPanel
-              finding={selectedFinding}
-              onBack={() => setSelectedFinding(null)}
-              onToggleStatus={updateFindingStatus}
-            />
+            finding={selectedFinding}
+            onBack={() => setSelectedFinding(null)}
+            onToggleStatus={updateFindingStatus}
+          />
         ) : (
           <section className="panel">
             <div className="panel-heading">
@@ -261,119 +376,139 @@ function App() {
                     ? "Prioritized findings"
                     : "Reported security findings"}
                 </h2>
+
                 <p>
                   {page === "overview"
                     ? "Highest severity issues appear first."
                     : "Existing findings from the backend; this page does not start a new scan."}
                 </p>
               </div>
+
               <span className="count-pill">
                 {findings.length} findings
               </span>
             </div>
 
-            {loading && <p className="message">Loading findings…</p>}
-            {error && <p className="error">{error}</p>}
+            {loading && (
+              <p className="message">Loading findings…</p>
+            )}
 
-            
-{!loading && !error && (
-  <>
-    <div className="finding-filters">
-      <input
-        type="text"
-        placeholder="Search by title, description, or source..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-      />
+            {error && (
+              <p className="error">{error}</p>
+            )}
 
-      <select
-        value={severityFilter}
-        onChange={(e) => setSeverityFilter(e.target.value)}
-      >
-        <option value="ALL">All Severities</option>
-        <option value="CRITICAL">Critical</option>
-        <option value="HIGH">High</option>
-        <option value="MEDIUM">Medium</option>
-        <option value="LOW">Low</option>
-      </select>
+            {!loading && !error && (
+              <>
+                {/* Filters */}
+                <div className="finding-filters">
+                  <input
+                    type="text"
+                    placeholder="Search by title, description, or source..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
 
-      <select
-        value={statusFilter}
-        onChange={(e) => setStatusFilter(e.target.value)}
-      >
-        <option value="ALL">All Statuses</option>
-        <option value="OPEN">Open</option>
-        <option value="RESOLVED">Resolved</option>
-      </select>
-    </div>
+                  <select
+                    value={severityFilter}
+                    onChange={(e) =>
+                      setSeverityFilter(e.target.value)
+                    }
+                  >
+                    <option value="ALL">All Severities</option>
+                    <option value="CRITICAL">Critical</option>
+                    <option value="HIGH">High</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
+                  </select>
 
-    <div className="table-wrapper">
-      <table>
-        <thead>
-          <tr>
-            <th>FINDING</th>
-            <th>SEVERITY</th>
-            <th>SOURCE</th>
-            <th>STATUS</th>
-            <th>ACTION</th>
-          </tr>
-        </thead>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) =>
+                      setStatusFilter(e.target.value)
+                    }
+                  >
+                    <option value="ALL">All Statuses</option>
+                    <option value="OPEN">Open</option>
+                    <option value="RESOLVED">Resolved</option>
+                  </select>
+                </div>
 
-        <tbody>
-          {filteredFindings.map((finding) => (
-            <tr key={finding.id}>
-              <td>
-                <strong>{finding.title}</strong>
-                <span className="description">
-                  {finding.description}
-                </span>
-              </td>
+                {/* Findings table */}
+                <div className="table-wrapper">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>FINDING</th>
+                        <th>SEVERITY</th>
+                        <th>SOURCE</th>
+                        <th>STATUS</th>
+                        <th>ACTION</th>
+                      </tr>
+                    </thead>
 
-              <td>
-                <span
-                  className={`severity ${String(
-                    finding.severity
-                  ).toLowerCase()}`}
-                >
-                  {finding.severity}
-                </span>
-              </td>
+                    <tbody>
+                      {filteredFindings.map((finding) => (
+                        <tr key={finding.id}>
+                          <td>
+                            <strong>{finding.title}</strong>
 
-              <td>{finding.sourceTool}</td>
+                            <span className="description">
+                              {finding.description}
+                            </span>
+                          </td>
 
-              <td>
-                <span className="status-pill">
-                  {finding.status}
-                </span>
-              </td>
+                          <td>
+                            <span
+                              className={`severity ${String(
+                                finding.severity
+                              ).toLowerCase()}`}
+                            >
+                              {finding.severity}
+                            </span>
+                          </td>
 
-              <td>
-                <button
-                  className="status-action-button"
-                  onClick={() => updateFindingStatus(finding)}
-                >
-                  {finding.status === "OPEN" ? "Resolve" : "Reopen"}
-                </button>
+                          <td>{finding.sourceTool}</td>
 
-                <button
-                  className="remediation-button"
-                  onClick={() => setSelectedFinding(finding)}
-                >
-                  View remediation
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                          <td>
+                            <span className="status-pill">
+                              {finding.status}
+                            </span>
+                          </td>
 
-      {filteredFindings.length === 0 && (
-        <p className="message">No matching findings.</p>
-      )}
-    </div>
-  </>
-)}
+                          <td>
+                            <button
+                              className="status-action-button"
+                              onClick={() =>
+                                updateFindingStatus(finding)
+                              }
+                            >
+                              {finding.status === "OPEN"
+                                ? "Resolve"
+                                : "Reopen"}
+                            </button>
 
+                            <button
+                              className="remediation-button"
+                              onClick={() =>
+                                setSelectedFinding(finding)
+                              }
+                            >
+                              View remediation
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {filteredFindings.length === 0 && (
+                    <p className="message">
+                      No matching findings.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
           </section>
         )}
 
@@ -382,11 +517,14 @@ function App() {
         </footer>
       </main>
     </div>
-
   );
 }
 
-function RemediationPanel({ finding, onBack, onToggleStatus }) {
+function RemediationPanel({
+  finding,
+  onBack,
+  onToggleStatus,
+}) {
   const guidance = getRemediation(finding);
 
   return (
@@ -396,6 +534,7 @@ function RemediationPanel({ finding, onBack, onToggleStatus }) {
           <h2>{guidance.title}</h2>
           <p>{finding.title}</p>
         </div>
+
         <span
           className={`severity ${String(
             finding.severity
@@ -406,35 +545,46 @@ function RemediationPanel({ finding, onBack, onToggleStatus }) {
       </div>
 
       <div className="remediation-content">
-        <p className="remediation-reason">{guidance.reason}</p>
+        <p className="remediation-reason">
+          {guidance.reason}
+        </p>
 
         <h3>Recommended steps</h3>
+
         <ol className="remediation-steps">
           {guidance.steps.map((step, index) => (
             <li key={step}>
-              <span className="step-number">{index + 1}</span>
+              <span className="step-number">
+                {index + 1}
+              </span>
+
               <span>{step}</span>
             </li>
           ))}
         </ol>
 
         <div className="remediation-note">
-          These are rule-based recommendations generated from the finding's
-          available details. Validate the issue before applying a fix.
-          SecureDev has not automatically remediated this finding.
+          These are rule-based recommendations generated from the
+          finding's available details. Validate the issue before
+          applying a fix. SecureDev has not automatically
+          remediated this finding.
         </div>
-          <button
-            className="status-action-button"
-            onClick={() => onToggleStatus(finding)}
-          >
-            {finding.status === "OPEN"
-              ? "Mark as resolved"
-              : "Reopen finding"}
-          </button>
 
-          <button className="refresh-button" onClick={onBack}>
-            ← &nbsp; Back to findings
-          </button>
+        <button
+          className="status-action-button"
+          onClick={() => onToggleStatus(finding)}
+        >
+          {finding.status === "OPEN"
+            ? "Mark as resolved"
+            : "Reopen finding"}
+        </button>
+
+        <button
+          className="refresh-button"
+          onClick={onBack}
+        >
+          ← &nbsp; Back to findings
+        </button>
       </div>
     </section>
   );

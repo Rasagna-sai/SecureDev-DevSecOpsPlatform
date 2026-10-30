@@ -1,3 +1,4 @@
+
 package com.securedev;
 
 import java.util.List;
@@ -27,6 +28,7 @@ import com.securedev.exception.GlobalExceptionHandler;
 import com.securedev.repository.SecurityFindingRepository;
 import com.securedev.service.GitleaksReportParser;
 import com.securedev.service.RiskPrioritizationService;
+import com.securedev.service.ScannerExecutionService;
 import com.securedev.service.TrivyReportParser;
 
 @WebMvcTest(SecurityFindingController.class)
@@ -39,17 +41,20 @@ class SecuredevBackendApplicationTests {
     @MockitoBean
     private SecurityFindingRepository repository;
 
-	@MockitoBean
-	private GitleaksReportParser gitleaksReportParser;
+    @MockitoBean
+    private GitleaksReportParser gitleaksReportParser;
 
     @MockitoBean
-private TrivyReportParser trivyReportParser;
-
-	@MockitoBean
-	private ObjectMapper objectMapper;
+    private TrivyReportParser trivyReportParser;
 
     @MockitoBean
-private RiskPrioritizationService riskPrioritizationService;
+    private ObjectMapper objectMapper;
+
+    @MockitoBean
+    private RiskPrioritizationService riskPrioritizationService;
+
+    @MockitoBean
+    private ScannerExecutionService scannerExecutionService;
 
     @Test
     void createFindingReturnsCreatedFinding() throws Exception {
@@ -115,137 +120,148 @@ private RiskPrioritizationService riskPrioritizationService;
                 .andExpect(jsonPath("$.severity").exists())
                 .andExpect(jsonPath("$.sourceTool").exists());
     }
-    
-@Test
-void importTrivyReportSavesNewFindings() throws Exception {
-    SecurityFinding finding = new SecurityFinding();
-    finding.setTitle("Trivy: CVE-TEST-123 in test-package");
-    finding.setDescription("Test vulnerability");
-    finding.setSeverity("HIGH");
-    finding.setSourceTool("Trivy");
 
-    when(trivyReportParser.parseReportFromJson(any(String.class)))
-            .thenReturn(List.of(finding));
-    when(repository.existsBySourceToolAndTitleAndDescription(
-            "Trivy", finding.getTitle(), finding.getDescription()))
-            .thenReturn(false);
-    when(repository.saveAll(anyList()))
-            .thenReturn(List.of(finding));
+    @Test
+    void importTrivyReportSavesNewFindings() throws Exception {
+        SecurityFinding finding = new SecurityFinding();
+        finding.setTitle("Trivy: CVE-TEST-123 in test-package");
+        finding.setDescription("Test vulnerability");
+        finding.setSeverity("HIGH");
+        finding.setSourceTool("Trivy");
 
-    mockMvc.perform(post("/api/findings/import/trivy")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content("""
-                {
-                  "ArtifactName": "test-image",
-                  "Results": []
-                }
-                """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].title")
-                    .value("Trivy: CVE-TEST-123 in test-package"));
+        when(trivyReportParser.parseReportFromJson(any(String.class)))
+                .thenReturn(List.of(finding));
+        when(repository.existsBySourceToolAndTitleAndDescription(
+                "Trivy", finding.getTitle(), finding.getDescription()))
+                .thenReturn(false);
+        when(repository.saveAll(anyList()))
+                .thenReturn(List.of(finding));
 
-    verify(repository).saveAll(anyList());
-}
+        mockMvc.perform(post("/api/findings/import/trivy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "ArtifactName": "test-image",
+                      "Results": []
+                    }
+                    """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title")
+                        .value("Trivy: CVE-TEST-123 in test-package"));
 
-@Test
-void importTrivyReportSkipsDuplicateFindings() throws Exception {
-    SecurityFinding finding = new SecurityFinding();
-    finding.setTitle("Trivy: CVE-TEST-123 in test-package");
-    finding.setDescription("Test vulnerability");
-    finding.setSeverity("HIGH");
-    finding.setSourceTool("Trivy");
+        verify(repository).saveAll(anyList());
+    }
 
-    when(trivyReportParser.parseReportFromJson(any(String.class)))
-            .thenReturn(List.of(finding));
-    when(repository.existsBySourceToolAndTitleAndDescription(
-            "Trivy", finding.getTitle(), finding.getDescription()))
-            .thenReturn(true);
+    @Test
+    void importTrivyReportSkipsDuplicateFindings() throws Exception {
+        SecurityFinding finding = new SecurityFinding();
+        finding.setTitle("Trivy: CVE-TEST-123 in test-package");
+        finding.setDescription("Test vulnerability");
+        finding.setSeverity("HIGH");
+        finding.setSourceTool("Trivy");
 
-    mockMvc.perform(post("/api/findings/import/trivy")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content("""
-                {
-                  "ArtifactName": "test-image",
-                  "Results": []
-                }
-                """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$").isEmpty());
+        when(trivyReportParser.parseReportFromJson(any(String.class)))
+                .thenReturn(List.of(finding));
+        when(repository.existsBySourceToolAndTitleAndDescription(
+                "Trivy", finding.getTitle(), finding.getDescription()))
+                .thenReturn(true);
 
-    verify(repository).saveAll(
-        argThat((List<SecurityFinding> list) -> list.isEmpty()));
-}
+        mockMvc.perform(post("/api/findings/import/trivy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "ArtifactName": "test-image",
+                      "Results": []
+                    }
+                    """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
 
-@Test
-void importTrivyReportRejectsMalformedJson() throws Exception {
-    when(trivyReportParser.parseReportFromJson(any(String.class)))
-            .thenThrow(new java.io.IOException("Invalid Trivy report JSON"));
+        verify(repository).saveAll(
+                argThat((List<SecurityFinding> list) -> list.isEmpty()));
+    }
 
-    mockMvc.perform(post("/api/findings/import/trivy")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content("{ invalid json"))
-            .andExpect(status().isBadRequest());
-}
+    @Test
+    void importTrivyReportRejectsMalformedJson() throws Exception {
+        when(trivyReportParser.parseReportFromJson(any(String.class)))
+                .thenThrow(new java.io.IOException("Invalid Trivy report JSON"));
 
-@Test
-void importGitleaksReportSavesNewFindings() throws Exception {
-    SecurityFinding finding = new SecurityFinding();
-    finding.setTitle("Hardcoded API key");
-    finding.setDescription("Secret found in test file");
-    finding.setSeverity("HIGH");
-    finding.setSourceTool("Gitleaks");
+        mockMvc.perform(post("/api/findings/import/trivy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ invalid json"))
+                .andExpect(status().isBadRequest());
+    }
 
-    when(gitleaksReportParser.parseReportFromJson(any(String.class)))
-            .thenReturn(List.of(finding));
-    when(repository.existsBySourceToolAndTitleAndDescription(
-            "Gitleaks", finding.getTitle(), finding.getDescription()))
-            .thenReturn(false);
-    when(repository.saveAll(anyList()))
-            .thenReturn(List.of(finding));
+    @Test
+    void importGitleaksReportSavesNewFindings() throws Exception {
+        SecurityFinding finding = new SecurityFinding();
+        finding.setTitle("Hardcoded API key");
+        finding.setDescription("Secret found in test file");
+        finding.setSeverity("HIGH");
+        finding.setSourceTool("Gitleaks");
 
-    mockMvc.perform(post("/api/findings/import/gitleaks")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content("[]"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].title").value("Hardcoded API key"));
+        when(gitleaksReportParser.parseReportFromJson(any(String.class)))
+                .thenReturn(List.of(finding));
+        when(repository.existsBySourceToolAndTitleAndDescription(
+                "Gitleaks", finding.getTitle(), finding.getDescription()))
+                .thenReturn(false);
+        when(repository.saveAll(anyList()))
+                .thenReturn(List.of(finding));
 
-    verify(repository).saveAll(anyList());
-}
+        mockMvc.perform(post("/api/findings/import/gitleaks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("[]"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("Hardcoded API key"));
 
-@Test
-void importGitleaksReportSkipsDuplicateFindings() throws Exception {
-    SecurityFinding finding = new SecurityFinding();
-    finding.setTitle("Hardcoded API key");
-    finding.setDescription("Secret found in test file");
-    finding.setSeverity("HIGH");
-    finding.setSourceTool("Gitleaks");
+        verify(repository).saveAll(anyList());
+    }
 
-    when(gitleaksReportParser.parseReportFromJson(any(String.class)))
-            .thenReturn(List.of(finding));
-    when(repository.existsBySourceToolAndTitleAndDescription(
-            "Gitleaks", finding.getTitle(), finding.getDescription()))
-            .thenReturn(true);
+    @Test
+    void importGitleaksReportSkipsDuplicateFindings() throws Exception {
+        SecurityFinding finding = new SecurityFinding();
+        finding.setTitle("Hardcoded API key");
+        finding.setDescription("Secret found in test file");
+        finding.setSeverity("HIGH");
+        finding.setSourceTool("Gitleaks");
 
-    mockMvc.perform(post("/api/findings/import/gitleaks")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content("[]"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$").isEmpty());
+        when(gitleaksReportParser.parseReportFromJson(any(String.class)))
+                .thenReturn(List.of(finding));
+        when(repository.existsBySourceToolAndTitleAndDescription(
+                "Gitleaks", finding.getTitle(), finding.getDescription()))
+                .thenReturn(true);
 
-    verify(repository).saveAll(
-            argThat((List<SecurityFinding> list) -> list.isEmpty()));
-}
+        mockMvc.perform(post("/api/findings/import/gitleaks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("[]"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
 
-@Test
-void importGitleaksReportRejectsMalformedJson() throws Exception {
-    when(gitleaksReportParser.parseReportFromJson(any(String.class)))
-            .thenThrow(new java.io.IOException("Invalid Gitleaks report JSON"));
+        verify(repository).saveAll(
+                argThat((List<SecurityFinding> list) -> list.isEmpty()));
+    }
 
-    mockMvc.perform(post("/api/findings/import/gitleaks")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content("{ invalid json"))
-            .andExpect(status().isBadRequest());
-}
+    @Test
+    void importGitleaksReportRejectsMalformedJson() throws Exception {
+        when(gitleaksReportParser.parseReportFromJson(any(String.class)))
+                .thenThrow(new java.io.IOException("Invalid Gitleaks report JSON"));
 
+        mockMvc.perform(post("/api/findings/import/gitleaks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ invalid json"))
+                .andExpect(status().isBadRequest());
+    }
 
+    @Test
+    void scanEndpointReturnsScannerSummary() throws Exception {
+        when(scannerExecutionService.scanRepository())
+                .thenReturn(new ScannerExecutionService.ScanResult(0, 18, 0, 18));
+
+        mockMvc.perform(post("/api/findings/scan"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gitleaksFindings").value(0))
+                .andExpect(jsonPath("$.trivyFindings").value(18))
+                .andExpect(jsonPath("$.insertedFindings").value(0))
+                .andExpect(jsonPath("$.duplicateFindings").value(18));
+    }
 }

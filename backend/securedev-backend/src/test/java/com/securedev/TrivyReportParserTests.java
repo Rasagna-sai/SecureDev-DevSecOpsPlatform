@@ -85,4 +85,33 @@ class TrivyReportParserTests {
         assertThrows(IOException.class,
                 () -> parser.parseReportFromJson(report));
     }
+
+    @Test
+void realTrivyReportFixtureConvertsVulnerabilityCorrectly()
+        throws Exception {
+
+    String report = java.nio.file.Files.readString(
+            java.nio.file.Path.of(
+                    "src/test/resources/reports/trivy-sample.json"));
+
+    List<SecurityFinding> findings =
+            parser.parseReportFromJson(report);
+
+    assertEquals(1, findings.size());
+
+    SecurityFinding finding = findings.get(0);
+
+    assertEquals(
+            "Trivy: CVE-2026-89407 in com.fasterxml.jackson.core:jackson-core",
+            finding.getTitle());
+
+    assertEquals("HIGH", finding.getSeverity());
+    assertEquals("Trivy", finding.getSourceTool());
+
+    org.junit.jupiter.api.Assertions.assertTrue(
+            finding.getDescription().contains("2.21.5"));
+
+    org.junit.jupiter.api.Assertions.assertTrue(
+            finding.getDescription().contains("2.18.11"));
+}
 }

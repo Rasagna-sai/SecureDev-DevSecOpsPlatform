@@ -1,0 +1,17 @@
+{
+  "ArtifactName": ".",
+  "Results": [
+    {
+      "Target": "backend/securedev-backend/pom.xml",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2026-89407",
+          "PkgName": "com.fasterxml.jackson.core:jackson-core",
+          "InstalledVersion": "2.21.5",
+          "FixedVersion": "2.18.11, 2.21.7, 2.22.3",
+          "Severity": "HIGH"
+        }
+      ]
+    }
+  ]
+}
